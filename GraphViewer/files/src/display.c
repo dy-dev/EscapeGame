@@ -60,7 +60,6 @@ void displayGraphWindow(Graph* graph)
 	int framesCounter = 0; //Variable for the blinking underscore
 
 
-	NodesList* graphNodes = graph->nodes;
 	Vector2 currentPoint = startPoint;
 	Vector2 mouse;
 
@@ -71,14 +70,13 @@ void displayGraphWindow(Graph* graph)
 	// Main game loop
 	while (!WindowShouldClose())    // Detect window close button or ESC key
 	{
-		graphNodes = graph->nodes;
 		currentPoint = startPoint;
 		mouse = GetMousePosition();
 
 		//Get all information needed to draw the graph
 		//such user inputs, moving nodes, creating edges, etc.
 
-		prepareGraphToDraw(graph, graphNodes, startPoint, &pressed,
+		prepareGraphToDraw(graph, startPoint, &pressed,
 			&displayEdgeWeightEditBox, &textBox, &letterCount, editedText, &editedEges,
 			&framesCounter, &creatingNode, &movingNode,
 			&mouse, &createEdge);
@@ -86,7 +84,7 @@ void displayGraphWindow(Graph* graph)
 		// Draw the graph
 		drawGraph(displayEdgeWeightEditBox, &textBox,
 			editedText, letterCount, framesCounter, &currentPoint, &startPoint,
-			graphNodes, graph, moveStartPoint, movingNode, pressed,
+			graph, moveStartPoint, movingNode, pressed,
 			&mouse, &createEdge);
 
 
@@ -106,25 +104,30 @@ void displayGraphWindow(Graph* graph)
 
 
 
-
-
-void prepareGraphToDraw(Graph* graph, NodesList* graphNodes, Vector2 startPoint,
+void prepareGraphToDraw(Graph* graph, Vector2 startPoint,
 	int* pressed, int* show, Rectangle* textBox,
 	int* letterCount, char* editedText, NodesList** editedEges, int* framesCounter, int* creatingNode,
 	Node** nodeToEdit, Vector2* mouse, int* createEdge)
 {
 	bool overEdge = false;
 	bool overNode = false;
-	while (graphNodes->next != NULL)
+	NodesList* currentNodeList = graph->nodes;
+	NodesList* prevNodeList = NULL;
+	while (currentNodeList->next != NULL)
 	{
-		Node* node = graphNodes->node;
+		Node* node = currentNodeList->node;
 
+		if (deleteNodeManagement(mouse, node, prevNodeList, currentNodeList, graph) || deleteEdgeManagement(graph, node, mouse, editedEges))
+			break;
+
+		prevNodeList = currentNodeList;
+
+		createNodeManagement(creatingNode, graph, mouse);
 		manageNodeRenameEditBox(graph, node, show, textBox, mouse, letterCount, editedText, framesCounter, &overNode, nodeToEdit);
 
 		if (*nodeToEdit == NULL || *createEdge) {
 			manageEdgeWeightEditBox(graph, node, show, textBox, mouse, letterCount, editedText, framesCounter, &overEdge, editedEges);
 
-			createNodeManagement(creatingNode, graph, graphNodes, mouse);
 
 
 			//If the mouse is over a node, the user can move it by left clicking on it
@@ -142,14 +145,131 @@ void prepareGraphToDraw(Graph* graph, NodesList* graphNodes, Vector2 startPoint,
 			}
 			//If no node is being moved check the next one, but if a node is being moved, stop checking
 			if ((*nodeToEdit) == NULL)
-				graphNodes = graphNodes->next;
+				currentNodeList = currentNodeList->next;
 			else
 				break;
 		}
 		else
 			break;
+
 	}
 }
+
+
+bool deleteNodeManagement(Vector2* mouse, Node* node, NodesList* prevNodeList, NodesList* currentNodeList, Graph* graph)
+{
+	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && IsKeyDown(KEY_LEFT_ALT))
+	{
+		bool overNode = CheckCollisionPointCircle(*mouse, (Vector2) { node->x, node->y }, 50.0f);
+		if (overNode)
+		{
+			if (prevNodeList)
+				prevNodeList->next = currentNodeList->next;
+			else
+				graph->nodes = currentNodeList->next;
+
+			NodesList* parseNodes = graph->nodes;
+			while (parseNodes->next != NULL)
+			{
+				Node* curNode = parseNodes->node;
+				if (curNode->adjacent != NULL)
+				{
+					NodesList* tmp = curNode->adjacent;
+					NodesList* prevTmp = NULL;
+
+					while (tmp != NULL)
+					{
+						if (tmp->node == node)
+						{
+							if (prevTmp != NULL)
+								prevTmp->next = tmp->next;
+							else
+								curNode->adjacent = tmp->next;
+							break;
+						}
+						prevTmp = tmp;
+						tmp = tmp->next;
+					}
+				}
+				parseNodes = parseNodes->next;
+			}
+			graph->nodesCount--;
+
+			free(node->adjacent);
+			free(node);
+			return true;
+		}
+	}
+	return false;
+}
+
+
+
+bool deleteEdgeManagement(Graph* graph, Node* node, Vector2* mouse, NodesList** editedEges)
+{
+	bool edgeRemoved = false;
+	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && IsKeyDown(KEY_LEFT_ALT))
+	{
+		bool overEdge = checkOverEdge(graph->oriented, node, mouse, editedEges);
+		if (overEdge)
+		{
+			NodesList* prevAdjacent = NULL;
+			NodesList* curAdjacent = node->adjacent;
+			while (curAdjacent != NULL)
+			{
+				if (curAdjacent->node == (*editedEges)->node)
+				{
+					if (prevAdjacent != NULL)
+						prevAdjacent->next = curAdjacent->next;
+					else
+						node->adjacent = curAdjacent->next;
+
+					edgeRemoved = true;
+					break;
+				}
+				prevAdjacent = curAdjacent;
+				curAdjacent = curAdjacent->next;
+			}
+		}
+	}
+
+	return edgeRemoved;
+}
+
+
+void createNodeManagement(int* creatingNode, Graph* graph, Vector2* mouse)
+{
+	if (IsKeyDown(KEY_LEFT_CONTROL) && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && *creatingNode == 0)
+	{
+		NodesList* curNodeList = graph->nodes;
+		graph->nodesCount++;
+		Node* nodeCurrent = (Node*)malloc(sizeof(Node));
+		while (curNodeList->next->node != NULL)
+		{
+			curNodeList = curNodeList->next;
+		}
+		char buffer[10];
+		_itoa(graph->nodesCount, buffer, 10);
+		nodeCurrent->id = (char*)malloc(strlen(buffer));
+		strcpy(nodeCurrent->id, buffer);
+		nodeCurrent->data = (int)(mouse->x + mouse->y);
+		nodeCurrent->x = mouse->x;
+		nodeCurrent->y = mouse->y;
+		nodeCurrent->adjacent = NULL;
+		curNodeList->next->node = nodeCurrent;
+
+
+		curNodeList->next->next = (NodesList*)malloc(sizeof(NodesList));
+		curNodeList->next->next->node = NULL;
+		curNodeList->next->next->next = NULL;
+
+		*creatingNode = 1;
+	}
+	if (IsMouseButtonUp(MOUSE_BUTTON_LEFT))
+		*creatingNode = 0;
+
+}
+
 
 void manageNodeRenameEditBox(Graph* graph, Node* node, int* show, Rectangle* textBox,
 	Vector2* mouse, int* letterCount, char* editedText, int* framesCounter, bool* overNode, Node** nodeToEdit)
@@ -161,11 +281,11 @@ void manageNodeRenameEditBox(Graph* graph, Node* node, int* show, Rectangle* tex
 
 	if ((currentGesture == GESTURE_DOUBLETAP && *overNode) || (*show && *nodeToEdit != NULL))
 	{
-		if(*nodeToEdit == NULL)
+		if (*nodeToEdit == NULL)
 			*nodeToEdit = node;
-		
+
 		bool edited = false;
-		getUserInput(show, &edited, textBox, mouse, letterCount, editedText, framesCounter);
+		getUserInput(show, &edited, textBox, mouse, letterCount, editedText, framesCounter, true);
 
 		if (edited)
 		{
@@ -244,7 +364,7 @@ bool checkOverEdge(bool oriented, Node* node, Vector2* mouse, NodesList** edited
 }
 
 
-void getUserInput(int* show,bool* edited, Rectangle* textBox, Vector2* mouse, int* letterCount, char* editedText, int* framesCounter)
+void getUserInput(int* show, bool* edited, Rectangle* textBox, Vector2* mouse, int* letterCount, char* editedText, int* framesCounter, bool acceptChar)
 {
 	if (!(*show)) {
 		(*textBox).x = mouse->x;
@@ -255,14 +375,14 @@ void getUserInput(int* show,bool* edited, Rectangle* textBox, Vector2* mouse, in
 	// Set the window's cursor to the I-Beam
 	SetMouseCursor(MOUSE_CURSOR_IBEAM);
 
-	// Get char pressed (unicode character) on the queue
+	// Get char pressed (Unicode character) on the queue
 	int key = GetKeyPressed();
 
 	// Check if more characters have been pressed on the same frame
 	while (key > 0)
 	{
 		// NOTE: Only allow numerci keys between 0...9
-		if (((key >= KEY_ZERO) && (key <= KEY_NINE)) && (*letterCount < MAX_INPUT_CHARS))
+		if (((key >= KEY_ZERO) && (key <= KEY_NINE)) || ((key >= KEY_A) && (key <= KEY_Z) && acceptChar) && (*letterCount < MAX_INPUT_CHARS))
 		{
 			editedText[*letterCount] = (char)key;
 			editedText[*letterCount + 1] = '\0'; // Add null terminator at the end of the string.
@@ -274,7 +394,7 @@ void getUserInput(int* show,bool* edited, Rectangle* textBox, Vector2* mouse, in
 			SetMouseCursor(MOUSE_CURSOR_ARROW);
 			if (key == KEY_ESCAPE)
 				editedText[0] = '\0';
-			edited = true;
+			*edited = true;
 		}
 
 		key = GetCharPressed();  // Check next character in the queue
@@ -303,7 +423,7 @@ void manageEdgeWeightEditBox(Graph* graph, Node* node, int* show, Rectangle* tex
 	if ((currentGesture == GESTURE_DOUBLETAP && *overEdge) || *show)
 	{
 		bool edited = false;
-		getUserInput(show,&edited, textBox, mouse, letterCount, editedText, framesCounter);
+		getUserInput(show, &edited, textBox, mouse, letterCount, editedText, framesCounter, false);
 
 		if (edited)
 		{
@@ -314,38 +434,6 @@ void manageEdgeWeightEditBox(Graph* graph, Node* node, int* show, Rectangle* tex
 	}
 }
 
-
-void createNodeManagement(int* creatingNode, Graph* graph, NodesList* graphNodes, Vector2* mouse)
-{
-	if (IsKeyDown(KEY_LEFT_CONTROL) && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && *creatingNode == 0)
-	{
-		graph->nodesCount++;
-		Node* nodeCurrent = (Node*)malloc(sizeof(Node));
-		while (graphNodes->next->node != NULL)
-		{
-			graphNodes = graphNodes->next;
-		}
-		char buffer[10];
-		_itoa(graph->nodesCount, buffer, 10);
-		nodeCurrent->id = (char*)malloc(strlen(buffer));
-		strcpy(nodeCurrent->id, buffer);
-		nodeCurrent->data = (int)(mouse->x + mouse->y);
-		nodeCurrent->x = mouse->x;
-		nodeCurrent->y = mouse->y;
-		nodeCurrent->adjacent = NULL;
-		graphNodes->next->node = nodeCurrent;
-
-
-		graphNodes->next->next = (NodesList*)malloc(sizeof(NodesList));
-		graphNodes->next->next->node = NULL;
-		graphNodes->next->next->next = NULL;
-
-		*creatingNode = 1;
-	}
-	if (IsMouseButtonUp(MOUSE_BUTTON_LEFT))
-		*creatingNode = 0;
-
-}
 
 void edgeCreationManagement(Node** nodeToMove, Vector2* mouse, int* createEdge, Graph* graph)
 {
@@ -392,7 +480,7 @@ void edgeCreationManagement(Node** nodeToMove, Vector2* mouse, int* createEdge, 
 
 void drawGraph(int showEdgeWeightEditBox, Rectangle* textBox,
 	char* edgeWeight, int letterCount, int framesCounter,
-	Vector2* currentPoint, Vector2* startPoint, NodesList* graphNodes,
+	Vector2* currentPoint, Vector2* startPoint,
 	Graph* graph, int moveStartPoint, Node* movingNode, int pressed,
 	Vector2* mouse, int* createEdge)
 {
@@ -403,7 +491,7 @@ void drawGraph(int showEdgeWeightEditBox, Rectangle* textBox,
 	currentPoint = startPoint;
 	int line = 0;
 	int column = 0;
-	graphNodes = graph->nodes;
+	NodesList* graphNodes = graph->nodes;
 	while (graphNodes->next != NULL)
 	{
 		Node* node = graphNodes->node;
@@ -429,21 +517,9 @@ void drawGraph(int showEdgeWeightEditBox, Rectangle* textBox,
 
 			DrawText(TextFormat("%d", adjencyList->weight), (int)middle.x, (int)middle.y, 30, RED);
 
-			if (moveStartPoint == -1 || movingNode != adjencyList->node)
-			{
-				Vector2 point = (Vector2){ adjencyList->node->x,adjencyList->node->y };
-
-				DrawCircleV(point, 30, BLUE);
-				DrawText(TextFormat("%s", adjencyList->node->id), (int)point.x - 5, (int)point.y - 15, 30, pressed == 0 ? WHITE : LIME);
-			}
-
 			adjencyList = adjencyList->next;
 		}
 
-		DrawCircleV(*currentPoint,
-			CheckCollisionPointCircle(*mouse, *currentPoint, 30.0f) && !IsKeyDown(KEY_LEFT_SHIFT) ? 50.f : 30.f,
-			(moveStartPoint != -1 && movingNode == node) ? RED : BLUE);
-		DrawText(TextFormat("%s", node->id), (int)currentPoint->x - 5, (int)currentPoint->y - 15, 30, WHITE);
 
 		column = (column + 1) % 5;
 		if (column == 0)
@@ -457,6 +533,27 @@ void drawGraph(int showEdgeWeightEditBox, Rectangle* textBox,
 
 		graphNodes = graphNodes->next;
 	}
+	graphNodes = graph->nodes;
+	while (graphNodes->next != NULL)
+	{
+		Node* node = graphNodes->node;
+
+		if (node->x == -1 && node->y == -1)
+		{
+			node->x = currentPoint->x;
+			node->y = currentPoint->y;
+		}
+		else
+		{
+			currentPoint->x = node->x;
+			currentPoint->y = node->y;
+		}
+		DrawCircleV(*currentPoint,
+			CheckCollisionPointCircle(*mouse, *currentPoint, 30.0f) && !IsKeyDown(KEY_LEFT_SHIFT) ? 50.f : 30.f,
+			(moveStartPoint != -1 && movingNode == node) ? RED : BLUE);
+		DrawText(TextFormat("%s", node->id), (int)currentPoint->x - 5, (int)currentPoint->y - 15, 30, WHITE);
+		graphNodes = graphNodes->next;
+	}
 
 	if (IsKeyDown(KEY_LEFT_SHIFT) && movingNode != NULL)
 	{
@@ -464,50 +561,8 @@ void drawGraph(int showEdgeWeightEditBox, Rectangle* textBox,
 		DrawLineEx((Vector2) { movingNode->x, movingNode->y }, * mouse, 3, BLACK);
 	}
 
-
 	if (showEdgeWeightEditBox)
 		drawEdgeWeightEditBox(showEdgeWeightEditBox, textBox, edgeWeight, letterCount, framesCounter);
-
-	//graphNodes = graph->nodes;
-	//while (graphNodes->next != NULL)
-	//{
-	//	Node* node = graphNodes->node;
-	//	NodesList* adjencyList = node->adjacent;
-	//	while (adjencyList != NULL)
-	//	{
-	//		//DrawLine(node->x, node->y, adjencyList->node->x, adjencyList->node->y, GREEN);
-
-	//		Vector3 start = { node->x, node->y,0 };
-	//		Vector3 end = { adjencyList->node->x, adjencyList->node->y,0 };
-	//		Vector3 control1 = Vector3Perpendicular(Vector3Subtract(end, start));
-	//		Vector2 tmp = Vector2Normalize((Vector2) { control1.x, control1.y });
-	//		//DrawLine(node->x, node->y, node->x + control1.x, node->y + control1.y, PURPLE);
-	//		//DrawLine(adjencyList->node->x, adjencyList->node->y, 
-	//		//	adjencyList->node->x + control1.x, adjencyList->node->y + control1.y, PURPLE);
-	//		int multiplier = 50;
-	//		DrawSplineSegmentBezierCubic(
-	//			(Vector2) {
-	//			node->x, node->y
-	//		},
-	//			(Vector2) {
-	//			node->x + multiplier * tmp.x, node->y + multiplier * tmp.y
-	//		},
-	//			(Vector2) {
-	//			adjencyList->node->x + multiplier * tmp.x, adjencyList->node->y + multiplier * tmp.y
-	//		},
-	//			(Vector2) {
-	//			adjencyList->node->x, adjencyList->node->y
-	//		},
-	//			2,
-	//			RED);
-
-	//		adjencyList = adjencyList->next;
-	//	}
-	//	graphNodes = graphNodes->next;
-
-	//}
-
-
 
 	EndDrawing();
 }
@@ -587,6 +642,3 @@ void drawOrientedCurve(Node* node, NodesList* adjencyList, Vector2* middle)
 
 //Suppression d'un node
 //Suppression d'un edge
-//Sauvegarde du graphe
-//Déplacement d'un node
-//Changement de la valeur d'un edge

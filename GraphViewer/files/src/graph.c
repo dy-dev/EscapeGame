@@ -56,7 +56,7 @@ Graph* jsonCreateGraphFromFile(const char* jsonFile)
 	//The adjencyList is an n-element array of 2-elements array : first element is the id of the connected node and the second is the weight of the edge
 	typed(json_element) jsonContent = interpretJSon(jsonFile);
 	typed(json_element) nodesIds = getJsonElementFromName(jsonContent, "nodesIds");
-	
+
 	typed(json_array)* nodesIdArray = nodesIds.value.as_array;
 	Graph* graph = createGraph(nodesIdArray, jsonContent, jsonFile);
 
@@ -69,7 +69,7 @@ Graph* jsonCreateGraphFromFile(const char* jsonFile)
 		//With its id, get the dictionary containing the node information
 		typed(json_element) nodeId = nodesIdArray->elements[i];
 		typed(json_element) nodeAsObject = getJsonElementFromName(jsonContent, nodeId.value.as_string);
-		
+
 		//From this dictionnary, get the x and y coordinates of the node
 		Node* curNode = curNodeList->node;
 		curNode->x = -1;
@@ -81,30 +81,34 @@ Graph* jsonCreateGraphFromFile(const char* jsonFile)
 		curNode->y = (float)nodeY.value.as_number.value.as_double;
 
 		//From this dictionnary, get the adjency list of the node
-		typed(json_element) connectedNodeIds = getJsonElementFromName(nodeAsObject, "adjencyList");
+		if (hasElementWithName(nodeAsObject, "adjencyList"))
+		{
 
-		typed(json_array)* values = connectedNodeIds.value.as_array;
-		char** adjencents = malloc(sizeof(char*) * values->count);
-		long* adjencentsWeight = malloc(sizeof(long) * values->count);
-		//For each element of the adjency list, get the id of the connected node and the weight of the edge
-		for (int j = 0; j < values->count; j++) {
-			typed(json_element) element = values->elements[j];
-			typed(json_array)* edgeInfos= element.value.as_array;
-			if(edgeInfos != NULL)
-			{
-				if (edgeInfos->elements[0].value.as_number.value.as_long != -1) {
-					adjencents[j] = (char*)malloc(strlen(edgeInfos->elements[0].value.as_string));
-					strcpy(adjencents[j] , edgeInfos->elements[0].value.as_string);
-					adjencentsWeight[j] = edgeInfos->elements[1].value.as_number.value.as_long;
+			typed(json_element) connectedNodeIds = getJsonElementFromName(nodeAsObject, "adjencyList");
+
+			typed(json_array)* values = connectedNodeIds.value.as_array;
+			char** adjencents = malloc(sizeof(char*) * values->count);
+			long* adjencentsWeight = malloc(sizeof(long) * values->count);
+			//For each element of the adjency list, get the id of the connected node and the weight of the edge
+			for (int j = 0; j < values->count; j++) {
+				typed(json_element) element = values->elements[j];
+				typed(json_array)* edgeInfos = element.value.as_array;
+				if (edgeInfos != NULL)
+				{
+					if (edgeInfos->elements[0].value.as_number.value.as_long != -1) {
+						adjencents[j] = (char*)malloc(strlen(edgeInfos->elements[0].value.as_string));
+						strcpy(adjencents[j], edgeInfos->elements[0].value.as_string);
+						adjencentsWeight[j] = edgeInfos->elements[1].value.as_number.value.as_long;
+					}
 				}
 			}
-		}
 
-		NodesList* adjencyList = (NodesList*)malloc(sizeof(NodesList));
-		curNode->adjacent = adjencyList;
-		adjencyList->node = NULL;
-		adjencyList->next = NULL;
-		createAdjacentList(graph, adjencyList, adjencents, adjencentsWeight, (int)values->count);
+			NodesList* adjencyList = (NodesList*)malloc(sizeof(NodesList));
+			curNode->adjacent = adjencyList;
+			adjencyList->node = NULL;
+			adjencyList->next = NULL;
+			createAdjacentList(graph, adjencyList, adjencents, adjencentsWeight, (int)values->count);
+		}
 		curNodeList = curNodeList->next;
 
 	}
@@ -139,7 +143,7 @@ void createAdjacentList(Graph* graph,
 		//look for the node in the graph
 		while (tmp != NULL)
 		{
-			if (tmp->node != NULL && strcmp(tmp->node->id, adjacents[i])==0)
+			if (tmp->node != NULL && strcmp(tmp->node->id, adjacents[i]) == 0)
 			{
 				adjencyList->node = tmp->node;
 				adjencyList->weight = adjacentsWeight[i];
@@ -168,11 +172,11 @@ void saveGraph(Graph* graph)
 		Node* curNode = curNodeList->node;
 		fprintf(file, "\"%s\"", curNode->id);
 		curNodeList = curNodeList->next;
-		if(i != graph->nodesCount - 1)
+		if (i != graph->nodesCount - 1)
 			fprintf(file, ",");
 	}
 	fprintf(file, "],");
-	
+
 	//Saves each node information	
 	curNodeList = graph->nodes;
 	for (size_t i = 1; i <= graph->nodesCount; i++)

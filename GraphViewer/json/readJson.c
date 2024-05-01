@@ -46,6 +46,10 @@ typed(json_element) interpretJSon(const char* fileName) {
 	return element;
 }
 
+bool hasElementWithName(typed(json_element) element, const char* nodeName) {
+	result(json_element) result = json_object_find(element.value.as_object, nodeName);
+	return !(result_is_err(json_element)(&result));
+};
 
 typed(json_element) getJsonElementFromName(typed(json_element) element, const char* nodeName)
 {
