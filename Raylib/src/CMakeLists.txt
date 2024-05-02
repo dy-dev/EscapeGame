@@ -2,9 +2,9 @@
 project(raylib C)
 set(PROJECT_VERSION 5.0.0)
 set(API_VERSION 500)
+cmake_minimum_required(VERSION 3.24)
 
 include(GNUInstallDirs)
-include(JoinPaths)
 
 # Sets build type if not set by now
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -45,7 +45,6 @@ endif ()
 # Sets additional platform options and link libraries for each platform
 # also selects the proper graphics API and version for that platform
 # Produces a variable LIBS_PRIVATE that will be used later
-include(LibraryConfigurations)
 
 if (USE_AUDIO)
     MESSAGE(STATUS "Audio Backend: miniaudio")
@@ -92,7 +91,6 @@ target_link_libraries(raylib "${LIBS_PRIVATE}")
 # Sets some compile time definitions for the pre-processor
 # If CUSTOMIZE_BUILD option is on you will not use config.h by default
 # and you will be able to select more build options
-include(CompileDefinitions)
 
 # Registering include directories
 target_include_directories(raylib
@@ -110,7 +108,6 @@ file(COPY ${raylib_public_headers} DESTINATION "include")
 
 # Includes information on how the library will be installed on the system
 # when cmake --install is run
-include(InstallConfigurations)
 
 # Print the flags for the user
 if (DEFINED CMAKE_BUILD_TYPE)
@@ -124,6 +121,5 @@ message(STATUS "  PLATFORM=" ${PLATFORM_CPP})
 message(STATUS "  GRAPHICS=" ${GRAPHICS})
 
 # Options if you want to create an installer using CPack
-include(PackConfigurations)
 
 enable_testing()
